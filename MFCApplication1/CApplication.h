@@ -1,13 +1,13 @@
 // 从类型库向导中用“添加类”创建的计算机生成的 IDispatch 包装器类
 
-#import "G:\Program Files\Common Files\Microsoft Shared\OFFICE15\MSO.DLL" \
+#import "C:\Program Files\Common Files\Microsoft Shared\OFFICE15\MSO.DLL" \
 	rename("RGB", "MSORGB") \
 	rename("DocumentProperties", "MSODocumentProperties")
 using namespace Office;
-#import "G:\Program Files (x86)\Common Files\microsoft shared\VBA\VBA6\VBE6EXT.OLB"
+#import "C:\Program Files (x86)\Common Files\microsoft shared\VBA\VBA6\VBE6EXT.OLB"
 
 using namespace VBIDE;
-#import "G:\Program Files\Microsoft Office\Office15\EXCEL.EXE" \
+#import "C:\Program Files\Microsoft Office\Office15\EXCEL.EXE" \
 	rename("DialogBox", "ExcelDialogBox") \
 	rename("RGB", "ExcelRGB") \
 	rename("CopyFile", "ExcelCopyFile") \
