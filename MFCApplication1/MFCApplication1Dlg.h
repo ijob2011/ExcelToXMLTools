@@ -7,6 +7,7 @@
 #include "IllusionExcelFile.h"
 #include "afxwin.h"
 #include "afxcmn.h"
+#include <string>
 
 class CMFCApplication1DlgAutoProxy;
 
@@ -77,9 +78,12 @@ public:
 	afx_msg void OnBnClickedCheckSaveAll();
 	// 是否保存全部sheet页
 	CButton m_check_save_all;
-
+	// 是否合并所有sheet到输出到同一个xml
+	CButton m_check_merge_all;
 	void AutoFillOutXmlPathName();
 
 	void DoExport(const CString& sheetName);
+	void DoExportToOneMergerXml(IllusionExcelFile& excl);
 	afx_msg void OnDropFiles(HDROP hDropInfo);
+	afx_msg void OnBnClickedCheckMergeAll();
 };

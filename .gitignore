@@ -243,3 +243,6 @@ ModelManifest.xml
 
 # FAKE - F# Make
 .fake/
+/MFCApplication1/merge1111.xml
+/MFCApplication1/MFCApplication1Dlg222.cpp
+/MFCApplication1/MFCApplication1_h.h

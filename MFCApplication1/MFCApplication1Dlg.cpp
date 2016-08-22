@@ -22,7 +22,6 @@
 
 #include <list>
 #include <vector>
-#include <string>
 #include <map>
 #include <utility>
 
@@ -233,6 +232,7 @@ void CMFCApplication1Dlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_RICHEDIT_OUT_TEXT, m_rich_edit_out_text);
 	DDX_Control(pDX, IDC_BROWSE_OUT_XML, m_browse_out_xml);
 	DDX_Control(pDX, IDC_CHECK_SAVE_ALL, m_check_save_all);
+	DDX_Control(pDX, IDC_CHECK_MERGE_ALL, m_check_merge_all);
 }
 
 BEGIN_MESSAGE_MAP(CMFCApplication1Dlg, CDialogEx)
@@ -245,6 +245,7 @@ BEGIN_MESSAGE_MAP(CMFCApplication1Dlg, CDialogEx)
 	ON_CBN_SELCHANGE(IDC_COMBO_SHEET, &CMFCApplication1Dlg::OnCbnSelchangeComboSheet)
 	ON_BN_CLICKED(IDC_CHECK_SAVE_ALL, &CMFCApplication1Dlg::OnBnClickedCheckSaveAll)
 	ON_WM_DROPFILES()
+	ON_BN_CLICKED(IDC_CHECK_MERGE_ALL, &CMFCApplication1Dlg::OnBnClickedCheckMergeAll)
 END_MESSAGE_MAP()
 
 int testOpenExcel() {
@@ -348,11 +349,13 @@ struct st_excle_data_rule
 
 
 
-CString AnalysisFirstRow(IllusionExcelFile& excl, const CString& sheetName, st_excle_data_rule& rule)
+CString AnalysisFirstRow(IllusionExcelFile& excl, st_excle_data_rule& rule)
 {
 	CString errorMsg;
-	if (excl.GetRowCount() <= 0) return errorMsg;
-
+	if (excl.GetRowCount() <= 0){
+		errorMsg = _T("没有数据");
+		return errorMsg;
+	}
 	const int nRow = excl.GetRowCount();
 	const int nCol = excl.GetColumnCount();
 	rule.nRow = nRow;
@@ -461,15 +464,11 @@ CString ExportToDataXml(IllusionExcelFile& excl, const CString& sheetName, std::
 
 	const string sheetNameStr = UnicodeToUTF8(sheetName.GetString());
 
-	vector<int>::iterator it;
-	vector<int>::iterator itBegin = rule.ignoreRow.begin();
 	vector<int>::iterator itEnd = rule.ignoreRow.end();
-	vector<int>::iterator itCol;
-	vector<int>::iterator itColBegin = rule.ignoreCol.begin();
 	vector<int>::iterator itColEnd = rule.ignoreCol.end();
 	for (int i = 1; i <= nRow; ++i)
 	{
-		it = find(itBegin, itEnd, i);
+		vector<int>::iterator it = find(rule.ignoreRow.begin(), itEnd, i);
 		if (it != itEnd) { //找到了
 			continue;
 		}
@@ -494,7 +493,7 @@ CString ExportToDataXml(IllusionExcelFile& excl, const CString& sheetName, std::
 		for (int j = 2; j <= nCol; ++j)
 		{
 			//列名为空的,已#开头 忽略这个数值
-			itCol = find(itColBegin, itColEnd, j);
+			vector<int>::iterator itCol = find(rule.ignoreCol.begin(), itColEnd, j);
 			if (itCol != itColEnd) { //找到了
 				continue;
 			}
@@ -592,6 +591,72 @@ CString ExportToStructXml(IllusionExcelFile& excl, const CString& sheetName, std
 	pDoc.SaveFile(filePathName.c_str(), FALSE); // 第二个参数为TRUE的话表示去掉空格。压缩存储。
 	return errorMsg;
 }
+
+CString FillXMLDoc(IllusionExcelFile& excl, tinyxml2::XMLDocument& doc, XMLElement* rootElement, int sheetIndx, st_excle_data_rule& rule)
+{
+	CString errorMsg;
+	const int nRow = rule.nRow;
+	const int nCol = rule.nCol;
+	vector<int>::iterator itEnd = rule.ignoreRow.end();
+	vector<int>::iterator itColEnd = rule.ignoreCol.end();
+
+	for (int i = 2; i <= nRow; ++i)
+	{
+
+		CString fieldName = excl.GetCellString(i, rule.FIELD_REF_ROW).Trim();
+		vector<int>::iterator itBegin = rule.ignoreRow.begin();
+		vector<int>::iterator it = find(itBegin, itEnd, i);
+		if (it != itEnd) { //找到了
+			continue;
+		}
+		//整行都为空判断
+		bool allEmpty = true;
+		for (int j = 1; j <= nCol; ++j)
+		{
+			if (rule.FIELD_REF_ROW == j)
+			{
+				continue;
+			}
+			CString strValue = excl.GetCellString(i, j);
+			if (!strValue.IsEmpty())
+			{
+				allEmpty = false;
+				break;
+			}
+		}
+		if (allEmpty) {
+			continue;
+		}
+
+
+		XMLElement* pUnit = doc.NewElement("unit");
+		rootElement->LinkEndChild(pUnit);
+		XMLElement* pClass = doc.NewElement("class");
+		pUnit->LinkEndChild(pClass);
+		pClass->SetText(sheetIndx);
+		for (int j = 2; j <= nCol; ++j)
+		{
+			//列名为空的,已#开头 忽略这个数值
+			vector<int>::iterator itCol = find(rule.ignoreCol.begin(), itColEnd, j);
+			if (itCol != itColEnd) { //找到了
+				continue;
+			}
+			CString strValue = excl.GetCellString(i, j).Trim();
+			string tagName = rule.fieldColumnVct[j];
+			string tagValue = strValue.IsEmpty() ? (rule.DEFAULE_VALUE_ROW == 0 ? "" : rule.defaultValueVct[j]) : UnicodeToUTF8(strValue.GetString());
+			XMLElement* pColumn = doc.NewElement(tagName.c_str());
+			pUnit->LinkEndChild(pColumn);
+			pColumn->SetText(tagValue.c_str());
+			if (rule.VALUE_TYPE_ROW)
+			{
+				string valueType = rule.valueTypVct[j];
+			}
+		}
+	}
+	return errorMsg;
+}
+
+
 
 // CMFCApplication1Dlg 消息处理程序
 
@@ -766,12 +831,19 @@ void CMFCApplication1Dlg::OnBnClickedExec()
 
 	if (checed == BST_CHECKED)
 	{
-		int sheetCount = m_excel_util->GetSheetCount();
-		vector<CString> sheetNames;
-		for (int i = 1; i <= sheetCount; i++)
+		if (!m_check_merge_all.GetCheck())
 		{
-			CString sheetName = m_excel_util->GetSheetName(i);
-			DoExport(sheetName);
+			int sheetCount = m_excel_util->GetSheetCount();
+			vector<CString> sheetNames;
+			for (int i = 1; i <= sheetCount; i++)
+			{
+				CString sheetName = m_excel_util->GetSheetName(i);
+				DoExport(sheetName);
+			}
+		}
+		else
+		{
+			DoExportToOneMergerXml(*m_excel_util);
 		}
 	}
 	else
@@ -871,11 +943,33 @@ void CMFCApplication1Dlg::OnBnClickedCheckSaveAll()
 	{
 		m_browse_out_xml.EnableFolderBrowseButton();
 		SetDlgItemTextW(ID_EXEC, _T("导出全部xml"));
+		m_check_merge_all.ShowWindow(TRUE);
 	}
 	else
 	{
 		m_browse_out_xml.EnableFileBrowseButton();
 		SetDlgItemTextW(ID_EXEC, _T("导出单个xml"));
+		m_check_merge_all.ShowWindow(FALSE);
+		m_check_merge_all.SetCheck(FALSE);
+	}
+	AutoFillOutXmlPathName();
+}
+
+
+void CMFCApplication1Dlg::OnBnClickedCheckMergeAll()
+{
+	int checed = m_check_merge_all.GetCheck();
+	if (checed == BST_CHECKED)
+	{
+		m_browse_out_xml.EnableFileBrowseButton();
+		SetDlgItemTextW(ID_EXEC, _T("导出合并xml"));
+	}
+	else
+	{
+		m_browse_out_xml.EnableFolderBrowseButton();
+		SetDlgItemTextW(ID_EXEC, _T("导出全部xml"));
+		m_check_merge_all.ShowWindow(TRUE);
+
 	}
 	AutoFillOutXmlPathName();
 }
@@ -887,11 +981,19 @@ void CMFCApplication1Dlg::AutoFillOutXmlPathName()
 	if (filePathName.IsEmpty()) {
 		return;
 	}
-	int checed = m_check_save_all.GetCheck();
+	int checedSaveAll = m_check_save_all.GetCheck();
+	int checedMerge = m_check_merge_all.GetCheck();
+
 
 	int splitIndex = filePathName.ReverseFind(_T('\\'));
 	CString filePath = filePathName.Left(splitIndex + 1);
-	if (checed == BST_CHECKED)
+	if (checedMerge == BST_CHECKED)
+	{
+		int splitIndex2 = filePathName.ReverseFind(_T('.'));
+		CString filePathNameWithoutSuffix = filePathName.Left(splitIndex2 + 1);
+		m_browse_out_xml.SetWindowTextW(filePathNameWithoutSuffix + ".xml");
+	}
+	else if (checedSaveAll == BST_CHECKED)
 	{
 		m_browse_out_xml.SetWindowTextW(filePath);
 	}
@@ -901,7 +1003,6 @@ void CMFCApplication1Dlg::AutoFillOutXmlPathName()
 		// GetDlgItemText(IDC_COMBO_SHEET, sheetName); //这个取得值，有延后bug
 		int i = m_boxSelect_sheet.GetCurSel();
 		m_boxSelect_sheet.GetLBText(i, sheetName);
-		int splitIndex = filePathName.ReverseFind(_T('\\'));
 		CString defoutOutXml = filePath + sheetName + ".xml";
 		m_browse_out_xml.SetWindowTextW(defoutOutXml);
 	}
@@ -931,7 +1032,7 @@ void CMFCApplication1Dlg::DoExport(const CString& sheetName)
 	//SaveToXmlDocument(*m_excel_util, UnicodeToANSI(outXmlPahtName.GetString()));
 	//CString errorMsg = SaveToXml(*m_excel_util, UnicodeToANSI(outXmlPahtName.GetString()), sheetName);
 	st_excle_data_rule rule;
-	CString errorMsg  = AnalysisFirstRow(*m_excel_util, sheetName, rule);
+	CString errorMsg  = AnalysisFirstRow(*m_excel_util, rule);
 	if (!errorMsg.IsEmpty()) goto printInfoMsg;
 	CacheCommonInfo(*m_excel_util, rule);
 	if (rule.type==2 && rule.FIELD_REF_COLUMN == 0)
@@ -964,6 +1065,58 @@ void CMFCApplication1Dlg::DoExport(const CString& sheetName)
 		AppendLineToOutText(successMsg, OutTextFont::C_GREEN);
 	}
 
+}
+
+void CMFCApplication1Dlg::DoExportToOneMergerXml(IllusionExcelFile& excl)
+{
+	CString outXmlPahtName;
+	GetDlgItemText(IDC_BROWSE_OUT_XML, outXmlPahtName);
+
+	CString errorMsg;
+	int sheetCount = excl.GetSheetCount();
+	vector<CString> sheetNames;
+	tinyxml2::XMLDocument doc;
+		
+	XMLDeclaration* pDel = doc.NewDeclaration("xml version=\"1.0\" encoding=\"UTF-8\"");
+	doc.LinkEndChild(pDel);
+	XMLElement* rootElement = doc.NewElement("object");
+	doc.LinkEndChild(rootElement);
+	CString sheetName;
+	for (int i = 1; i <= sheetCount; i++)
+	{
+		sheetName = excl.GetSheetName(i);
+		bool bLoad = excl.LoadSheet(sheetName, TRUE);
+	
+		st_excle_data_rule rule;
+		errorMsg = AnalysisFirstRow(excl, rule);
+		if (!errorMsg.IsEmpty())
+			goto printInfoMsg;
+		CacheCommonInfo(excl, rule);
+			
+		errorMsg = FillXMLDoc(excl, doc, rootElement, i, rule);
+		if (!errorMsg.IsEmpty())
+			goto printInfoMsg;
+	}
+	doc.SetBOM(true);
+	
+	doc.SaveFile(UnicodeToANSI(outXmlPahtName.GetString()).c_str(), FALSE); // 第二个参数为TRUE的话表示去掉空格。压缩存储。
+	
+printInfoMsg:
+	if (!errorMsg.IsEmpty())
+	{
+		errorMsg.Insert(0, _T("标签页") + sheetName + _T(":"));
+		AppendLineToOutText(errorMsg, OutTextFont::C_RED);
+	}
+	else
+	{
+		CString successMsg;
+		successMsg.Append(_T("成功导出文件"));
+		successMsg.Append(excl.GetOpenFileNameW() + _T(".xml"));
+		successMsg.Append(_T("到"));
+		successMsg.Append(outXmlPahtName);
+		//successMsg.Append(ANSIToUnicode(filePathName));
+		AppendLineToOutText(successMsg, OutTextFont::C_GREEN);
+	}
 }
 
 
