@@ -631,9 +631,9 @@ CString FillXMLDoc(IllusionExcelFile& excl, tinyxml2::XMLDocument& doc, XMLEleme
 
 		XMLElement* pUnit = doc.NewElement("unit");
 		rootElement->LinkEndChild(pUnit);
-		XMLElement* pClass = doc.NewElement("class");
+		/*XMLElement* pClass = doc.NewElement("class");
 		pUnit->LinkEndChild(pClass);
-		pClass->SetText(sheetIndx);
+		pClass->SetText(sheetIndx);*/
 		for (int j = 2; j <= nCol; ++j)
 		{
 			//列名为空的,已#开头 忽略这个数值
@@ -643,6 +643,10 @@ CString FillXMLDoc(IllusionExcelFile& excl, tinyxml2::XMLDocument& doc, XMLEleme
 			}
 			CString strValue = excl.GetCellString(i, j).Trim();
 			string tagName = rule.fieldColumnVct[j];
+			if (tagName == "type")
+			{
+				tagName = "class";
+			}
 			string tagValue = strValue.IsEmpty() ? (rule.DEFAULE_VALUE_ROW == 0 ? "" : rule.defaultValueVct[j]) : UnicodeToUTF8(strValue.GetString());
 			XMLElement* pColumn = doc.NewElement(tagName.c_str());
 			pUnit->LinkEndChild(pColumn);
@@ -991,7 +995,7 @@ void CMFCApplication1Dlg::AutoFillOutXmlPathName()
 	{
 		int splitIndex2 = filePathName.ReverseFind(_T('.'));
 		CString filePathNameWithoutSuffix = filePathName.Left(splitIndex2 + 1);
-		m_browse_out_xml.SetWindowTextW(filePathNameWithoutSuffix + ".xml");
+		m_browse_out_xml.SetWindowTextW(filePathNameWithoutSuffix + "xml");
 	}
 	else if (checedSaveAll == BST_CHECKED)
 	{
@@ -1111,7 +1115,7 @@ printInfoMsg:
 	{
 		CString successMsg;
 		successMsg.Append(_T("成功导出文件"));
-		successMsg.Append(excl.GetOpenFileNameW() + _T(".xml"));
+		//successMsg.Append(excl.GetOpenFileNameW() + _T(".xml"));
 		successMsg.Append(_T("到"));
 		successMsg.Append(outXmlPahtName);
 		//successMsg.Append(ANSIToUnicode(filePathName));
